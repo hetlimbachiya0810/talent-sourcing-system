@@ -1,2 +1,4 @@
 # Talent Sourcing System
-Agile project for managing job descriptions and candidate CVs.
+An Agile project for managing job descriptions and candidate CVs.
+- Backend: FastAPI with PostgreSQL
+- Frontend: React
