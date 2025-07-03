@@ -1,6 +1,6 @@
 from sqlalchemy.orm import Session
-from backend.db.database import SessionLocal
-from backend.models.models import Job, Vendor, Candidate
+from db.database import SessionLocal
+from models.models import Job, Vendor, Candidate
 
 def test_schema():
     db: Session = SessionLocal()

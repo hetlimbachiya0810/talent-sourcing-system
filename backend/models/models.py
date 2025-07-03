@@ -37,8 +37,3 @@ class Candidate(Base):
     certifications = Column(String)
     cv_file_path = Column(String)
     submission_date = Column(DateTime, default=lambda: datetime.now(timezone.utc))
-
-
-
-
-

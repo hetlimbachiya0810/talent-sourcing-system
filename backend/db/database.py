@@ -10,5 +10,5 @@ engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 def init_db():
-    from backend.models.models import Base
+    from models.models import Base
     Base.metadata.create_all(bind=engine)
