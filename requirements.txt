@@ -44,6 +44,7 @@ psycopg2-binary==2.9.10
 psycopg2-pool==1.2
 pure_eval==0.2.3
 pydantic==2.11.7
+pydantic-settings==2.10.1
 pydantic_core==2.33.2
 pyfiglet==1.0.2
 Pygments==2.18.0
