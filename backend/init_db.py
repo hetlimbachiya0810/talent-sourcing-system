@@ -1,6 +1,11 @@
+import asyncio
 from db.database import init_db
 
-if __name__ == "__main__":
+async def main():
+    """Initialize the database tables asynchronously"""
     print("Creating database tables...")
-    init_db()
+    await init_db()
     print("Tables created successfully!")
+
+if __name__ == "__main__":
+    asyncio.run(main())
