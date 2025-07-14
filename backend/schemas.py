@@ -20,10 +20,9 @@ class JobResponse(BaseModel):
     contract_duration: Optional[str] = None
     created_at: datetime
 
-    class config:
+    class Config:
         '''Configuration for the JobResponse schema.'''
         from_attributes = True
-        orm_mode = True
 
 class VendorCreate(BaseModel):
     '''Schema for creating a new vendor entry.'''
@@ -38,13 +37,12 @@ class VendorResponse(BaseModel):
     email: Optional[str] = None
     contact: Optional[str] = None
 
-    class config:
+    class Config:
         '''Configuration for the VendorResponse schema.'''
         from_attributes = True
-        orm_mode = True
 
 class CandidateCreate(BaseModel):
-    '''Schema for creating a new candidate entry.'''
+    '''Schema for creating a new candidate entry from form data.'''
     job_id: int
     vendor_id: int
     name: str = Field(..., min_length=1, max_length=255, description="Candidate's name")
@@ -56,7 +54,6 @@ class CandidateCreate(BaseModel):
     time_zone_alignment: Optional[str] = Field(None, description="Time zone alignment with the job")
     contract_duration_willingness: Optional[str] = Field(None, description="Willingness for contract duration")
     certifications: Optional[str] = Field(None, description="Certifications held by the candidate")
-    cv_file_path: Optional[str] = Field(None, description="File path to the candidate's CV")
 
 class CandidateResponse(BaseModel):
     '''Schema for the response of a candidate entry.'''
@@ -74,10 +71,7 @@ class CandidateResponse(BaseModel):
     certifications: Optional[str] = None
     cv_file_path: Optional[str] = None
     submission_date: datetime
-    created_at: datetime
 
-    class config:
+    class Config:
         '''Configuration for the CandidateResponse schema.'''
         from_attributes = True
-        orm_mode = True
-
