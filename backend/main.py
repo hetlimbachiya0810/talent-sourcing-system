@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from routers.jobs import router as jobs_router
 from routers.candidates import router as candidates_router
+from routers.vendors import router as vendors_router
 
 app = FastAPI(
     title="Talent Sourcing System API",
@@ -21,6 +22,7 @@ app.add_middleware(
 # Include routers
 app.include_router(jobs_router)
 app.include_router(candidates_router)
+app.include_router(vendors_router)
 
 @app.get("/")
 async def read_root():
