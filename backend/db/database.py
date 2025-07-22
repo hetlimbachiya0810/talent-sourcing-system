@@ -12,7 +12,7 @@ load_dotenv(dotenv_path=Path(__file__).resolve().parent.parent.parent / ".env")
 
 DATABASE_URL = os.getenv("DATABASE_URL")
 
-engine = create_async_engine(DATABASE_URL, echo=True)
+engine = create_async_engine(DATABASE_URL)
 
 async_session = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
 
@@ -20,7 +20,7 @@ async def get_async_session() -> AsyncGenerator[AsyncSession, None]:
     async with async_session() as session:
         yield session
 
-# Init function (run manually or at startup)
+
 async def init_db():
     from models.models import Base  
     async with engine.begin() as conn:

@@ -1,5 +1,5 @@
 import os
-import shutil
+# import shutil
 from datetime import datetime
 from pathlib import Path
 from typing import List
@@ -7,16 +7,31 @@ from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File,
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
-
+import cloudinary
+import cloudinary.uploader
+from cloudinary.utils import cloudinary_url
 from db.database import get_async_session
 from models.models import Candidate, Job, Vendor
 from schemas import CandidateCreate, CandidateResponse, VendorResponse
 
 router = APIRouter(prefix="/candidates", tags=["candidates"])
 
-# Create uploads directory if it doesn't exist
-UPLOAD_DIR = Path("backend/uploads")
-UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+# # Create uploads directory if it doesn't exist
+# UPLOAD_DIR = Path("backend/uploads")
+# UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+
+cloudinary_url = os.getenv("CLOUDINARY_URL")
+
+if cloudinary_url:
+    cloudinary.config(cloudinary_url=cloudinary_url)
+else:
+    # Fallback to individual keys if the URL isn't set
+    cloudinary.config(
+        cloud_name = os.getenv("CLOUDINARY_CLOUD_NAME"),
+        api_key = os.getenv("CLOUDINARY_API_KEY"),
+        api_secret = os.getenv("CLOUDINARY_API_SECRET"),
+        secure = True
+    )
 
 # Allowed file extensions and their MIME types
 ALLOWED_EXTENSIONS = {".pdf", ".docx"}
@@ -51,35 +66,67 @@ def validate_file(file: UploadFile) -> None:
             detail=f"Invalid file type. Expected PDF or DOCX, got: {file.content_type}"
         )
     
-    # Check file size
-    if file.size and file.size > MAX_FILE_SIZE:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"File too large. Maximum size is 5MB, got: {file.size / (1024*1024):.2f}MB"
-        )
+    # # Check file size
+    # if file.size and file.size > MAX_FILE_SIZE:
+    #     raise HTTPException(
+    #         status_code=status.HTTP_400_BAD_REQUEST,
+    #         detail=f"File too large. Maximum size is 5MB, got: {file.size / (1024*1024):.2f}MB"
+    #     )
 
-def generate_unique_filename(original_filename: str, candidate_id: int) -> str:
-    """Generate a unique filename for the uploaded CV."""
-    file_ext = Path(original_filename).suffix.lower()
+# def generate_unique_filename(original_filename: str, candidate_id: int) -> str:
+#     """Generate a unique filename for the uploaded CV."""
+#     file_ext = Path(original_filename).suffix.lower()
+#     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+#     return f"candidate_{candidate_id}_{timestamp}{file_ext}"
+
+def generate_public_id(original_filename: str, candidate_id: int) -> str:
+    """Generate a unique public_id for the Cloudinary upload, including a folder path."""
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    return f"candidate_{candidate_id}_{timestamp}{file_ext}"
+    return f"candidate_cvs/candidate_{candidate_id}_{timestamp}"
 
-async def save_uploaded_file(file: UploadFile, filename: str) -> str:
-    """Save uploaded file to the uploads directory."""
-    try:
-        file_path = UPLOAD_DIR / filename
+# async def save_uploaded_file(file: UploadFile, filename: str) -> str:
+#     """Save uploaded file to the uploads directory."""
+#     try:
+#         file_path = UPLOAD_DIR / filename
+#         # print('Reached file till here')
+#         upload_result = cloudinary.uploader.upload(file.file, 
+#                                                    public_id="user_cv_loc",  
+#                                                    resource_type="raw")
+#         print(upload_result["secure_url"])
+
+#         # Save the file
+#         # with open(file_path, "wb") as buffer:
+#         #     shutil.copyfileobj(file.file, buffer)
         
-        # Save the file
-        with open(file_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
-        
-        # Return relative path for database storage
-        return str(file_path)
+#         # Return relative path for database storage
+#         return str(upload_result["secure_url"])
     
-    except Exception as e:
-        raise HTTPException(
+#     except Exception as e:
+#         raise HTTPException(
+#             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+#             detail=f"Error saving file: {str(e)}"
+#         )
+
+async def upload_file_to_cloudinary(file: UploadFile, public_id: str) -> str:
+    """Upload file to Cloudinary and return the secure URL."""
+    try:
+        upload_result = cloudinary.uploader.upload(
+            file.file,
+            public_id=public_id,
+            resource_type="raw",
+            max_size=MAX_FILE_SIZE
+        )
+        return upload_result.get("secure_url")
+    
+    except cloudinary.exceptions.Error as e:
+         if "file size" in str(e).lower(): # Handle specific validation errors from Cloudinary
+             raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"File is too large. Maximum size is {MAX_FILE_SIZE / (1024*1024):.0f}MB."
+        )
+         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error saving file: {str(e)}"
+            detail=f"Error uploading file to Cloudinary: {str(e)}"
         )
 
 @router.post("/", response_model=CandidateResponse, status_code=status.HTTP_201_CREATED)
@@ -155,14 +202,21 @@ async def create_candidate(
         db.add(candidate)
         await db.flush()
         
-        # Generate unique filename using candidate ID
-        unique_filename = generate_unique_filename(cv_file.filename, candidate.id)
+        # # Generate unique filename using candidate ID
+        # unique_filename = generate_unique_filename(cv_file.filename, candidate.id)
         
-        # Save the uploaded file
-        file_path = await save_uploaded_file(cv_file, unique_filename)
-        
+        # # Save the uploaded file
+        # # file_path = await save_uploaded_file(cv_file, unique_filename)
+        # file_path = await save_uploaded_file(cv_file, unique_filename)
+
+        # Generate a unique public ID for Cloudinary using the candidate's new DB ID
+        public_id = generate_public_id(cv_file.filename, candidate.id)
+
+        #upload the file using the new function and unique ID
+        file_url = await upload_file_to_cloudinary(cv_file, public_id)
+
         # Update candidate with file path
-        candidate.cv_file_path = file_path
+        candidate.cv_file_path = file_url
         
         # Commit the transaction
         await db.commit()
