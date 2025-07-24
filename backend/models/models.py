@@ -20,6 +20,7 @@ class Job(Base):
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc)
     )
+    # is_accepted: Mapped[bool] = mapped_column(default=True)
 
 class Vendor(Base):
     __tablename__ = "vendors"
@@ -48,3 +49,16 @@ class Candidate(Base):
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc)
     )
+
+# class User(Base):
+#     __tablename__ = "users"
+
+#     id: Mapped[int] = mapped_column(primary_key=True, index=True)
+#     username: Mapped[str] = mapped_column(unique=True, nullable=False)
+#     email: Mapped[str] = mapped_column(unique=True, nullable=False)
+#     password: Mapped[str] = mapped_column(nullable=False)
+    
+#     created_at: Mapped[datetime] = mapped_column(
+#         DateTime(timezone=True),
+#         default=lambda: datetime.now(timezone.utc)
+#     )

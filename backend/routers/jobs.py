@@ -30,7 +30,8 @@ async def create_job(
             description=job.description,
             time_zone=job.time_zone,
             budget_range=job.budget_range,
-            contract_duration=job.contract_duration
+            contract_duration=job.contract_duration,
+            # is_accepted= True
         )
         
         # Add to database

@@ -40,8 +40,7 @@ ALLOWED_MIME_TYPES = {
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 }
 
-# Maximum file size (5MB)
-MAX_FILE_SIZE = 5 * 1024 * 1024  # 5MB in bytes
+MAX_FILE_SIZE = 5 * 1024 * 1024  
 
 def validate_file(file: UploadFile) -> None:
     """Validate uploaded file type and size."""
@@ -51,7 +50,6 @@ def validate_file(file: UploadFile) -> None:
             detail="No file selected"
         )
     
-    # Check file extension
     file_ext = Path(file.filename).suffix.lower()
     if file_ext not in ALLOWED_EXTENSIONS:
         raise HTTPException(
@@ -59,7 +57,6 @@ def validate_file(file: UploadFile) -> None:
             detail=f"Invalid file type. Only PDF and DOCX files are allowed. Got: {file_ext}"
         )
     
-    # Check MIME type
     if file.content_type not in ALLOWED_MIME_TYPES:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -162,10 +159,8 @@ async def create_candidate(
     - **certifications**: Certifications (optional)
     """
     try:
-        # Validate file
         validate_file(cv_file)
         
-        # Validate that job_id exists
         job_result = await db.execute(select(Job).where(Job.id == job_id))
         job = job_result.scalar_one_or_none()
         if not job:
@@ -174,7 +169,6 @@ async def create_candidate(
                 detail=f"Job with ID {job_id} not found"
             )
         
-        # Validate that vendor_id exists
         vendor_result = await db.execute(select(Vendor).where(Vendor.id == vendor_id))
         vendor = vendor_result.scalar_one_or_none()
         if not vendor:
@@ -218,7 +212,6 @@ async def create_candidate(
         # Update candidate with file path
         candidate.cv_file_path = file_url
         
-        # Commit the transaction
         await db.commit()
         await db.refresh(candidate)
         
