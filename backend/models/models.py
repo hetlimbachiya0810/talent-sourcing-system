@@ -1,4 +1,5 @@
-from sqlalchemy import String, Integer, ForeignKey, DateTime
+from pydantic import EmailStr
+from sqlalchemy import String, Integer, ForeignKey, DateTime,Float
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from datetime import datetime, timezone
 
@@ -12,15 +13,15 @@ class Job(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
     title: Mapped[str] = mapped_column(nullable=False)
-    description: Mapped[str] = mapped_column(nullable=True)
-    time_zone: Mapped[str] = mapped_column(nullable=True)
-    budget_range: Mapped[str] = mapped_column(nullable=True)
-    contract_duration: Mapped[str] = mapped_column(nullable=True)
+    description: Mapped[str] = mapped_column(nullable=False)
+    time_zone: Mapped[str] = mapped_column(nullable=False)
+    budget_range: Mapped[str] = mapped_column(nullable=False)
+    contract_duration: Mapped[str] = mapped_column(nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc)
     )
-    # is_accepted: Mapped[bool] = mapped_column(default=True)
+    # is_accepted: Mapped[bool] = mapped_column(Boolean, default=True)
 
 class Vendor(Base):
     __tablename__ = "vendors"
@@ -36,7 +37,7 @@ class Candidate(Base):
     job_id: Mapped[int] = mapped_column(ForeignKey("jobs.id"))
     vendor_id: Mapped[int] = mapped_column(ForeignKey("vendors.id"))
     name: Mapped[str] = mapped_column(nullable=False)
-    email: Mapped[str] = mapped_column(nullable=True)
+    email: Mapped[str] = None
     phone: Mapped[str] = mapped_column(nullable=True)
     soft_skills: Mapped[str] = mapped_column(nullable=True)
     hard_skills: Mapped[str] = mapped_column(nullable=True)
@@ -49,7 +50,9 @@ class Candidate(Base):
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc)
     )
-
+    match_score: Mapped[float] = mapped_column(Float, nullable=True)
+    status: Mapped[str] = mapped_column(String(50), nullable=True)  # "Shortlisted" or "Rejected"
+    mismatch_summary: Mapped[str] = mapped_column(nullable=True)  # Summary of mismatches for scores < 80%
 # class User(Base):
 #     __tablename__ = "users"
 

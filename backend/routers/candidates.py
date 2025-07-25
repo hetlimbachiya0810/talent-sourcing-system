@@ -1,31 +1,25 @@
 import os
-# import shutil
 from datetime import datetime
 from pathlib import Path
 from typing import List
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from sqlalchemy.orm import selectinload
 import cloudinary
 import cloudinary.uploader
-from cloudinary.utils import cloudinary_url
 from db.database import get_async_session
 from models.models import Candidate, Job, Vendor
-from schemas import CandidateCreate, CandidateResponse, VendorResponse
+from schemas import CandidateCreate, CandidateResponse, VendorResponse, MatchResultResponse
+from services.matching_service import MatchingService
 
 router = APIRouter(prefix="/candidates", tags=["candidates"])
 
-# # Create uploads directory if it doesn't exist
-# UPLOAD_DIR = Path("backend/uploads")
-# UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-
+# Cloudinary configuration
 cloudinary_url = os.getenv("CLOUDINARY_URL")
 
 if cloudinary_url:
     cloudinary.config(cloudinary_url=cloudinary_url)
 else:
-    # Fallback to individual keys if the URL isn't set
     cloudinary.config(
         cloud_name = os.getenv("CLOUDINARY_CLOUD_NAME"),
         api_key = os.getenv("CLOUDINARY_API_KEY"),
@@ -33,14 +27,13 @@ else:
         secure = True
     )
 
-# Allowed file extensions and their MIME types
+# File validation constants
 ALLOWED_EXTENSIONS = {".pdf", ".docx"}
 ALLOWED_MIME_TYPES = {
     "application/pdf",
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 }
-
-MAX_FILE_SIZE = 5 * 1024 * 1024  
+MAX_FILE_SIZE = 5 * 1024 * 1024  # 5MB in bytes
 
 def validate_file(file: UploadFile) -> None:
     """Validate uploaded file type and size."""
@@ -62,47 +55,11 @@ def validate_file(file: UploadFile) -> None:
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Invalid file type. Expected PDF or DOCX, got: {file.content_type}"
         )
-    
-    # # Check file size
-    # if file.size and file.size > MAX_FILE_SIZE:
-    #     raise HTTPException(
-    #         status_code=status.HTTP_400_BAD_REQUEST,
-    #         detail=f"File too large. Maximum size is 5MB, got: {file.size / (1024*1024):.2f}MB"
-    #     )
-
-# def generate_unique_filename(original_filename: str, candidate_id: int) -> str:
-#     """Generate a unique filename for the uploaded CV."""
-#     file_ext = Path(original_filename).suffix.lower()
-#     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-#     return f"candidate_{candidate_id}_{timestamp}{file_ext}"
 
 def generate_public_id(original_filename: str, candidate_id: int) -> str:
-    """Generate a unique public_id for the Cloudinary upload, including a folder path."""
+    """Generate a unique public_id for Cloudinary upload."""
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     return f"candidate_cvs/candidate_{candidate_id}_{timestamp}"
-
-# async def save_uploaded_file(file: UploadFile, filename: str) -> str:
-#     """Save uploaded file to the uploads directory."""
-#     try:
-#         file_path = UPLOAD_DIR / filename
-#         # print('Reached file till here')
-#         upload_result = cloudinary.uploader.upload(file.file, 
-#                                                    public_id="user_cv_loc",  
-#                                                    resource_type="raw")
-#         print(upload_result["secure_url"])
-
-#         # Save the file
-#         # with open(file_path, "wb") as buffer:
-#         #     shutil.copyfileobj(file.file, buffer)
-        
-#         # Return relative path for database storage
-#         return str(upload_result["secure_url"])
-    
-#     except Exception as e:
-#         raise HTTPException(
-#             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-#             detail=f"Error saving file: {str(e)}"
-#         )
 
 async def upload_file_to_cloudinary(file: UploadFile, public_id: str) -> str:
     """Upload file to Cloudinary and return the secure URL."""
@@ -116,12 +73,12 @@ async def upload_file_to_cloudinary(file: UploadFile, public_id: str) -> str:
         return upload_result.get("secure_url")
     
     except cloudinary.exceptions.Error as e:
-         if "file size" in str(e).lower(): # Handle specific validation errors from Cloudinary
-             raise HTTPException(
+        if "file size" in str(e).lower():
+            raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"File is too large. Maximum size is {MAX_FILE_SIZE / (1024*1024):.0f}MB."
-        )
-         raise HTTPException(
+            )
+        raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error uploading file to Cloudinary: {str(e)}"
         )
@@ -142,25 +99,11 @@ async def create_candidate(
     certifications: str = Form(None, description="Certifications"),
     db: AsyncSession = Depends(get_async_session)
 ):
-    """
-    Create a new candidate entry with CV upload.
-    
-    - **cv_file**: CV file (PDF or DOCX format only, max 5MB)
-    - **job_id**: ID of the job this candidate is applying for
-    - **vendor_id**: ID of the vendor submitting this candidate
-    - **name**: Candidate's full name (required)
-    - **email**: Candidate's email address (optional)
-    - **phone**: Candidate's phone number (optional)
-    - **soft_skills**: Soft skills (optional)
-    - **hard_skills**: Hard skills (optional)
-    - **experience**: Years of experience (optional)
-    - **time_zone_alignment**: Time zone alignment (optional)
-    - **contract_duration_willingness**: Contract duration willingness (optional)
-    - **certifications**: Certifications (optional)
-    """
+    """Create a new candidate entry with CV upload and automatic matching."""
     try:
         validate_file(cv_file)
         
+        # Validate job exists
         job_result = await db.execute(select(Job).where(Job.id == job_id))
         job = job_result.scalar_one_or_none()
         if not job:
@@ -169,6 +112,7 @@ async def create_candidate(
                 detail=f"Job with ID {job_id} not found"
             )
         
+        # Validate vendor exists
         vendor_result = await db.execute(select(Vendor).where(Vendor.id == vendor_id))
         vendor = vendor_result.scalar_one_or_none()
         if not vendor:
@@ -177,7 +121,7 @@ async def create_candidate(
                 detail=f"Vendor with ID {vendor_id} not found"
             )
         
-        # Create candidate record first (without file path)
+        # Create candidate record
         candidate = Candidate(
             job_id=job_id,
             vendor_id=vendor_id,
@@ -192,28 +136,25 @@ async def create_candidate(
             certifications=certifications
         )
         
-        # Add candidate to database and flush to get the ID
         db.add(candidate)
         await db.flush()
         
-        # # Generate unique filename using candidate ID
-        # unique_filename = generate_unique_filename(cv_file.filename, candidate.id)
-        
-        # # Save the uploaded file
-        # # file_path = await save_uploaded_file(cv_file, unique_filename)
-        # file_path = await save_uploaded_file(cv_file, unique_filename)
-
-        # Generate a unique public ID for Cloudinary using the candidate's new DB ID
+        # Upload CV file
         public_id = generate_public_id(cv_file.filename, candidate.id)
-
-        #upload the file using the new function and unique ID
         file_url = await upload_file_to_cloudinary(cv_file, public_id)
-
-        # Update candidate with file path
         candidate.cv_file_path = file_url
         
         await db.commit()
         await db.refresh(candidate)
+        
+        # Automatically process matching for the new candidate
+        try:
+            match_result = await MatchingService.process_candidate_match(candidate.id, db)
+            if not match_result['success']:
+                # Log the error but don't fail the candidate creation
+                print(f"Warning: Matching failed for candidate {candidate.id}: {match_result.get('error')}")
+        except Exception as e:
+            print(f"Warning: Error during automatic matching for candidate {candidate.id}: {str(e)}")
         
         return candidate
         
@@ -228,12 +169,8 @@ async def create_candidate(
         )
 
 @router.get("/", response_model=List[CandidateResponse])
-async def get_all_candidates(
-    db: AsyncSession = Depends(get_async_session)
-):
-    """
-    Retrieve all candidates with their details.
-    """
+async def get_all_candidates(db: AsyncSession = Depends(get_async_session)):
+    """Retrieve all candidates with their details."""
     try:
         result = await db.execute(select(Candidate))
         candidates = result.scalars().all()
@@ -245,13 +182,8 @@ async def get_all_candidates(
         )
 
 @router.get("/{candidate_id}", response_model=CandidateResponse)
-async def get_candidate(
-    candidate_id: int,
-    db: AsyncSession = Depends(get_async_session)
-):
-    """
-    Retrieve a specific candidate by ID.
-    """
+async def get_candidate(candidate_id: int, db: AsyncSession = Depends(get_async_session)):
+    """Retrieve a specific candidate by ID."""
     try:
         result = await db.execute(select(Candidate).where(Candidate.id == candidate_id))
         candidate = result.scalar_one_or_none()
@@ -272,15 +204,9 @@ async def get_candidate(
         )
 
 @router.get("/by-job/{job_id}", response_model=List[CandidateResponse])
-async def get_candidates_by_job(
-    job_id: int,
-    db: AsyncSession = Depends(get_async_session)
-):
-    """
-    Retrieve all candidates for a specific job.
-    """
+async def get_candidates_by_job(job_id: int, db: AsyncSession = Depends(get_async_session)):
+    """Retrieve all candidates for a specific job."""
     try:
-        # First check if job exists
         job_result = await db.execute(select(Job).where(Job.id == job_id))
         job = job_result.scalar_one_or_none()
         if not job:
@@ -303,14 +229,121 @@ async def get_candidates_by_job(
             detail=f"Error retrieving candidates for job {job_id}: {str(e)}"
         )
 
+# NEW MATCHING ENDPOINTS FOR SPRINT 2
+
+@router.post("/match/{candidate_id}")
+async def match_candidate(candidate_id: int, db: AsyncSession = Depends(get_async_session)):
+    """Process matching for a specific candidate against their job."""
+    try:
+        result = await MatchingService.process_candidate_match(candidate_id, db)
+        
+        if not result['success']:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=result['error']
+            )
+        
+        return {
+            "message": "Candidate matching completed successfully",
+            "result": result
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error processing candidate match: {str(e)}"
+        )
+
+@router.post("/match-job/{job_id}")
+async def match_all_candidates_for_job(job_id: int, db: AsyncSession = Depends(get_async_session)):
+    """Process matching for all candidates of a specific job."""
+    try:
+        result = await MatchingService.process_job_matches(job_id, db)
+        
+        if not result['success']:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=result['error']
+            )
+        
+        return {
+            "message": "Job matching completed successfully",
+            "result": result
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error processing job matches: {str(e)}"
+        )
+
+@router.get("/match-results/{job_id}")
+async def get_match_results(job_id: int, db: AsyncSession = Depends(get_async_session)):
+    """Retrieve match results for all candidates of a specific job."""
+    try:
+        # Verify job exists
+        job_result = await db.execute(select(Job).where(Job.id == job_id))
+        job = job_result.scalar_one_or_none()
+        if not job:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Job with ID {job_id} not found"
+            )
+        
+        results = await MatchingService.get_match_results_for_job(job_id, db)
+        
+        return {
+            "job_id": job_id,
+            "job_title": job.title,
+            "total_candidates": len(results),
+            "candidates": results
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error retrieving match results: {str(e)}"
+        )
+
+@router.get("/shortlisted/{job_id}")
+async def get_shortlisted_candidates(job_id: int, db: AsyncSession = Depends(get_async_session)):
+    """Retrieve only shortlisted candidates for a specific job."""
+    try:
+        # Verify job exists
+        job_result = await db.execute(select(Job).where(Job.id == job_id))
+        job = job_result.scalar_one_or_none()
+        if not job:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Job with ID {job_id} not found"
+            )
+        
+        shortlisted = await MatchingService.get_shortlisted_candidates(job_id, db)
+        
+        return {
+            "job_id": job_id,
+            "job_title": job.title,
+            "shortlisted_count": len(shortlisted),
+            "shortlisted_candidates": shortlisted
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error retrieving shortlisted candidates: {str(e)}"
+        )
+
 @router.get("/by-vendor/{vendor_id}", response_model=List[CandidateResponse])
-async def get_candidates_by_vendor(
-    vendor_id: int,
-    db: AsyncSession = Depends(get_async_session)
-):
-    """
-    Retrieve all candidates submitted by a specific vendor.
-    """
+async def get_candidates_by_vendor(vendor_id: int, db: AsyncSession = Depends(get_async_session)):
+    """Retrieve all candidates submitted by a specific vendor."""
     try:
         # First check if vendor exists
         vendor_result = await db.execute(select(Vendor).where(Vendor.id == vendor_id))

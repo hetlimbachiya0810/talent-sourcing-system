@@ -1,6 +1,6 @@
 from datetime import datetime
-from pydantic import BaseModel, Field
-from typing import Optional
+from pydantic import BaseModel, EmailStr, Field
+from typing import Optional, Dict
 
 class JobCreate(BaseModel):
     '''Schema for creating a new job entry.'''
@@ -24,17 +24,25 @@ class JobResponse(BaseModel):
         '''Configuration for the JobResponse schema.'''
         from_attributes = True
 
+class JobUpdate(BaseModel):
+    '''Schema for updating an existing job entry.'''
+    title: Optional[str] = Field(None, min_length=1, max_length=255, description="Job title")
+    description: Optional[str] = Field(None, description="Job description")
+    time_zone: Optional[str] = Field(None, description="Time zone required for the job")
+    budget_range: Optional[str] = Field(None, description="Budget range for the job")
+    contract_duration: Optional[str] = Field(None, description="Contract duration for the job")
+
 class VendorCreate(BaseModel):
     '''Schema for creating a new vendor entry.'''
     name: str = Field(..., min_length=1, max_length=255, description="Vendor's name")
-    email: Optional[str] = Field(None, description="Vendor's email")
+    email: Optional[EmailStr] = Field(None, description="Vendor's email")
     contact: Optional[str] = Field(None, description="Vendor's contact number")
     
 class VendorResponse(BaseModel):
     '''Schema for the response of a vendor entry.'''
     id: int
     name: str
-    email: Optional[str] = None
+    email: Optional[EmailStr] = None
     contact: Optional[str] = None
 
     class Config:
@@ -46,7 +54,7 @@ class CandidateCreate(BaseModel):
     job_id: int
     vendor_id: int
     name: str = Field(..., min_length=1, max_length=255, description="Candidate's name")
-    email: Optional[str] = Field(None, description="Candidate's email")
+    email: Optional[EmailStr] = Field(None, description="Candidate's email")
     phone: Optional[str] = Field(None, description="Candidate's phone number")
     soft_skills: Optional[str] = Field(None, description="Soft skills of the candidate")
     hard_skills: Optional[str] = Field(None, description="Hard skills of the candidate")
@@ -56,12 +64,12 @@ class CandidateCreate(BaseModel):
     certifications: Optional[str] = Field(None, description="Certifications held by the candidate")
 
 class CandidateResponse(BaseModel):
-    '''Schema for the response of a candidate entry.'''
+    '''Schema for the response of a candidate entry including matching results.'''
     id: int
     job_id: int
     vendor_id: int
     name: str
-    email: Optional[str] = None
+    email: Optional[EmailStr] = None
     phone: Optional[str] = None
     soft_skills: Optional[str] = None
     hard_skills: Optional[str] = None
@@ -71,7 +79,53 @@ class CandidateResponse(BaseModel):
     certifications: Optional[str] = None
     cv_file_path: Optional[str] = None
     submission_date: datetime
+    # New matching fields
+    match_score: Optional[float] = None
+    status: Optional[str] = None  # "Shortlisted" or "Rejected"
+    mismatch_summary: Optional[str] = None
 
     class Config:
         '''Configuration for the CandidateResponse schema.'''
         from_attributes = True
+
+class MatchResultResponse(BaseModel):
+    '''Schema for match result responses.'''
+    candidate_id: int
+    candidate_name: str
+    vendor_id: int
+    match_score: Optional[float] = None
+    status: Optional[str] = None
+    mismatch_summary: Optional[str] = None
+    hard_skills: Optional[str] = None
+    soft_skills: Optional[str] = None
+    experience: Optional[int] = None
+    certifications: Optional[str] = None
+    time_zone_alignment: Optional[str] = None
+    contract_duration_willingness: Optional[str] = None
+    submission_date: datetime
+
+class MatchProcessResult(BaseModel):
+    '''Schema for match processing results.'''
+    success: bool
+    candidate_id: Optional[int] = None
+    candidate_name: Optional[str] = None
+    job_title: Optional[str] = None
+    match_score: Optional[float] = None
+    status: Optional[str] = None
+    mismatch_summary: Optional[str] = None
+    field_scores: Optional[Dict[str, float]] = None
+    error: Optional[str] = None
+
+class JobMatchResults(BaseModel):
+    '''Schema for job-level match results.'''
+    job_id: int
+    job_title: str
+    total_candidates: int
+    candidates: list[MatchResultResponse]
+
+class ShortlistedResults(BaseModel):
+    '''Schema for shortlisted candidates results.'''
+    job_id: int
+    job_title: str
+    shortlisted_count: int
+    shortlisted_candidates: list[MatchResultResponse]

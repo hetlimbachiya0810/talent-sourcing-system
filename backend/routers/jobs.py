@@ -5,7 +5,7 @@ from typing import List
 
 from db.database import get_async_session
 from models.models import Job
-from schemas import JobCreate, JobResponse
+from schemas import JobCreate, JobResponse, JobUpdate
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
 
@@ -92,4 +92,48 @@ async def get_job(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error retrieving job: {str(e)}"
+        )
+    
+@router.patch("/{job_id}", response_model=JobResponse)
+async def update_job(
+    job_id: int,
+    job_update: JobUpdate,
+    db: AsyncSession = Depends(get_async_session)
+):
+    """
+    Update an existing job description.
+    
+    - **title**: Job title (optional)
+    - **description**: Job description (optional)
+    - **time_zone**: Required time zone (optional)
+    - **budget_range**: Budget range for the job (optional)
+    - **contract_duration**: Duration of the contract (optional)
+    """
+    try:
+        db_job = await db.get(Job, job_id)
+
+        if not db_job:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Job with ID {job_id} not found"
+            )
+        
+        # Update fields
+        update_job = job_update.model_dump(exclude_unset=True)
+
+        for key, value in update_job.items():
+            setattr(db_job, key, value)
+
+        await db.commit()
+        await db.refresh(db_job)
+        
+        return db_job
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error updating job: {str(e)}"
         )
