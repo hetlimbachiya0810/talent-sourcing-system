@@ -37,7 +37,7 @@ class Candidate(Base):
     job_id: Mapped[int] = mapped_column(ForeignKey("jobs.id"))
     vendor_id: Mapped[int] = mapped_column(ForeignKey("vendors.id"))
     name: Mapped[str] = mapped_column(nullable=False)
-    email: Mapped[str] = None
+    email: Mapped[str] = mapped_column(nullable=False)
     phone: Mapped[str] = mapped_column(nullable=True)
     soft_skills: Mapped[str] = mapped_column(nullable=True)
     hard_skills: Mapped[str] = mapped_column(nullable=True)

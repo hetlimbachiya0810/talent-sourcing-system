@@ -1,5 +1,6 @@
 from datetime import datetime
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, field_validator
+import re
 from typing import Optional, Dict
 
 class JobCreate(BaseModel):
@@ -59,6 +60,32 @@ class CandidateCreate(BaseModel):
     soft_skills: Optional[str] = Field(None, description="Soft skills of the candidate")
     hard_skills: Optional[str] = Field(None, description="Hard skills of the candidate")
     experience: Optional[int] = Field(None, ge=0, description="Years of experience")
+    @field_validator('experience', mode='before')
+    @classmethod
+    def parse_experience(cls, v):
+        # Handle None/empty values
+        if v is None or v == "":
+            return None
+            
+        if isinstance(v, int):
+            return v
+            
+        if isinstance(v, str):
+            v = v.strip()
+            if not v:  # Empty string after strip
+                return None
+                
+            numbers = re.findall(r'\d+\.?\d*', v.lower())
+            if numbers:
+                return int(float(numbers[0]))
+            
+            if 'fresher' in v.lower() or 'entry' in v.lower():
+                return 0
+                
+            return 0  # Default for unparseable strings
+        
+        return int(v) if v is not None else None
+
     time_zone_alignment: Optional[str] = Field(None, description="Time zone alignment with the job")
     contract_duration_willingness: Optional[str] = Field(None, description="Willingness for contract duration")
     certifications: Optional[str] = Field(None, description="Certifications held by the candidate")

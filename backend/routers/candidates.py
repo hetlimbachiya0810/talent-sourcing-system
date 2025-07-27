@@ -101,6 +101,7 @@ async def create_candidate(
 ):
     """Create a new candidate entry with CV upload and automatic matching."""
     try:
+        print(f"Received experience: {experience}")
         validate_file(cv_file)
         
         # Validate job exists
@@ -120,9 +121,8 @@ async def create_candidate(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Vendor with ID {vendor_id} not found"
             )
-        
-        # Create candidate record
-        candidate = Candidate(
+         # ✅ NEW: Use Pydantic schema for validation and parsing
+        candidate_data = CandidateCreate(
             job_id=job_id,
             vendor_id=vendor_id,
             name=name,
@@ -135,6 +135,10 @@ async def create_candidate(
             contract_duration_willingness=contract_duration_willingness,
             certifications=certifications
         )
+
+        print(f"Parsed experience: {candidate_data.experience}")
+
+        candidate = Candidate(**candidate_data.model_dump())  # Use model_dump() for safe conversion
         
         db.add(candidate)
         await db.flush()
