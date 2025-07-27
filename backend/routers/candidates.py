@@ -121,7 +121,7 @@ async def create_candidate(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Vendor with ID {vendor_id} not found"
             )
-         # ✅ NEW: Use Pydantic schema for validation and parsing
+
         candidate_data = CandidateCreate(
             job_id=job_id,
             vendor_id=vendor_id,
