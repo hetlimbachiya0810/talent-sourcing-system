@@ -4,3 +4,7 @@ __pycache__/
 /frontend/node_modules/
 .env
 /backend/uploads/
+# backend/migrations/
+backend/task1_testing_guide.py
+backend/test_cost_calculations.py
+backend/task1_sample_tracker.json
